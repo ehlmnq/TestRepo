@@ -1,1 +1,214 @@
+# This code sample uses the 'requests' library:
+# http://docs.python-requests.org
+import requests
+import re
+import os
+from requests.auth import HTTPBasicAuth
+import json
+from bs4 import BeautifulSoup
+import csv
+import pandas as pd
+from collections import Counter
+import maskpass
+import datetime
+import base64
+import os
+
+username = str(input("Enter the username : "))
+password = maskpass.askpass(prompt="Password:", mask="#")
+
+auth = HTTPBasicAuth(username, password)
+headers = {
+        "Accept": "application/json"
+        }
+
+arrIssue = []
+arrType = []
+arrValue = []
+arrName = []
+arrStatus =[]
+arrComment = []
+arrSearch = []
+issueKey = []
+itmKey = []
+arrAging= []
+arrAssignee=[]
+arrPriority=[]
+arrSummary=[]
+arrPod=[]
+
+
+def ticket_Call():
+    url =str(input("Enter the jira url  : "))
+    #url = fhttps://plan.comviva.com/issues/?filter=22473&jql=(project%20%3D%20MON%20AND%20fixVersion%20%3D%20X.10%20AND%20%22Release%20Date%22%20%3D%202024-07-15%20OR%20%22Epic%20Link%22%20%3D%20%22Workflow%20Engine%22)%20AND%20status%20not%20in%20(cancelled)%20AND%20issuetype%20not%20in%20(Task)%20AND%20status%20%3D%20%22In%20Integration%22
+    response = requests.get(url, auth=HTTPBasicAuth(username, password))
+    # Check the response status code
+    if response.status_code == 200:
+        # Successful request
+        print("Request successful!")
+        line = ' <span class=" jira-issue-status-lozenge aui-lozenge jira-issue-status-lozenge-green jira-issue-status-lozenge-done aui-lozenge-subtle jira-issue-status-lozenge-max-width-short" data-tooltip="&lt;span class=&quot;jira-issue-status-tooltip-title&quot;&gt;Done&lt;/span&gt;">"'
+        
+        soup = BeautifulSoup(response.text,'html.parser')
+        Key = soup.select("[class='navigator-content'] [class='issuekey']")
+
+        for itm in Key:
+            issueKey.append(itm.get_text().strip())  
+            print(itm.get_text().strip(), '&&&&&&&&&&&&&&&&&&&&&&&&&&&&')   
+            #no_space1 = list[map(lambda x:x!=',,' ,no_space)]
+            #print('################# no space ###############', no_space1)                
+    else:
+        # Print the error details if the request was not successful
+        print(f"Request failed with status code {response.status_code}")
+        print("Error message:", response.text)
+
+    return issueKey    
+
+items =  ticket_Call()
+
+print('**********', items)
+
+# recursive function to search in a nested object 
+def find_value_by_key(data, key):
+    if isinstance(data, dict):
+        if key in data:
+            return data[key]
+        for k, v in data.items():
+            result = find_value_by_key(v, key)
+            if result is not None:
+                return result
+    elif isinstance(data, list):
+        for item in data:
+            result = find_value_by_key(item, key)
+            if result is not None:
+                return result
+    return None
+
+
+
+
+#for item in items:
+
+def link_items(item):
+    url = fhttps://plan.comviva.com/rest/api/2/issue/{item}
+    response = requests.request(
+    "GET",
+    url,
+    headers=headers,
+    auth=auth
+    )
+    res = response.json()
+    issueLnks = res["fields"]["issuelinks"]
+    print(res)
+    #print('row !!!!', res["fields"]["emailAddress"])
+    #print('Story No', item)
+    print('#####################################################################')
+    for a in issueLnks:
+        print(a["type"]["name"])
+        value = find_value_by_key(a, "key")
+        print(value)
+        if "outwardIssue" in a:
+            itmKey.append(item)
+            arrIssue.append(a["type"]["name"])
+            arrType.append(value)
+            arrName.append(a["outwardIssue"]["fields"]["issuetype"]["name"])
+            arrStatus.append(a["outwardIssue"]["fields"]["status"]["statusCategory"]["name"])
+            arrSummary.append(a["outwardIssue"]["fields"]["summary"])
+            try:
+                arrPriority.append(a["outwardIssue"]["fields"]["priority"]["name"])
+            except KeyError as e:
+                arrPriority.append("None")  
+                print(f"Error: {e}") 
+            try:
+                arrPod.append(res["fields"]["customfield_14313"]["value"])
+            except KeyError as e:
+                arrPod.append("None") 
+
+            #print(a["type"]["name"],"\t",value,"\t",a["outwardIssue"]["fields"]["issuetype"]["name"],"\t", a["outwardIssue"]["fields"]["status"]["statusCategory"]["name"])
+            #print(a)
+        else:
+            #lnkItms = a["type"]["name"] +"\t" +value +"\t" + a["inwardIssue"]["fields"]["issuetype"]["name"] +"\t" + a["outwardIssue"]["fields"]["status"]["statusCategory"]["name"]
+            itmKey.append(item)
+            arrIssue.append(a["type"]["name"])
+            arrType.append(value)
+            arrName.append(a["inwardIssue"]["fields"]["issuetype"]["name"])
+            arrStatus.append(a["inwardIssue"]["fields"]["status"]["statusCategory"]["name"])
+            arrSummary.append(a["inwardIssue"]["fields"]["summary"])
+            try:
+                arrPriority.append(a["inwardIssue"]["fields"]["priority"]["name"])
+            except TypeError as e:
+                arrPriority.append("None")  
+                print(f"Error: {e}") 
+            try:
+                arrPod.append(res["fields"]["customfield_14313"]["value"])
+            except TypeError as e:
+                arrPod.append("None") 
+
+for a in items:
+    link_items(a)
+
+#print(items)
+#link_items("MON-80104")
+
+
+def issue_assignee_aging():
+    for item in arrType:
+        print('#####',item)
+        today = datetime.datetime.today()
+        # Format the date as YYYY-MM-DD
+        formatted_date = today.strftime('%Y-%m-%d')
+        print(formatted_date)
+        url1 = fhttps://plan.comviva.com/rest/api/2/issue/{item}
+        comResponse = requests.request(
+        "GET",
+        url1,
+        headers=headers,
+        auth=auth
+        )
+        #print('Story No Comments', item)
+        print('#####################################################################')
+        comRes= comResponse.json()
+        try:
+            arrAssignee.append(comRes["fields"]["assignee"]["name"])
+                
+        except TypeError as e:
+            arrAssignee.append("Unassigned")  
+            print(f"Error: {e}")         
+            
+        #print(comRes["fields"]["assignee"]["name"])
+        date_obj = datetime.datetime.strptime(comRes["fields"]["created"][0:10], '%Y-%m-%d').date()
+        todayDate = datetime.datetime.strptime(formatted_date, '%Y-%m-%d').date()
+        print(type(formatted_date))
+        print(type(date_obj))
+        print(todayDate-date_obj)
+        arrAging.append(todayDate-date_obj)
+
+
+issue_assignee_aging()       
+
+data = {
+        'Story':itmKey,
+        'Pod_Name':arrPod,
+        #'LinkedIssues':arrIssue,
+        'IssueType':arrType,
+        'Summary':arrSummary,
+        'Priority': arrPriority,
+        'IssueName':arrName,
+        'IssueStatus':arrStatus,
+        'Assignee':arrAssignee,
+        'Aging':arrAging,
+        }
+
+# Create a DataFrame
+df = pd.DataFrame(data)
+#ds = df.sort_values(by='IssueKey',ascending=True)
+print(df)
+
+# Specify the file name and write the DataFrame to a CSV file
+csv_file_path = 'Items_Issues_DBXP_DBXP_Details.csv'
+df.to_csv(csv_file_path, index=False)    
+   
+
+#print(json.dumps(json.loads(response.text["expand"]), sort_keys=True, indent=4, separators=(",", ": ")))
+
+
 
